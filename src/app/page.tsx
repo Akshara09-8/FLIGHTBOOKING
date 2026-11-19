@@ -10,9 +10,14 @@ export default function HomePage() {
           Join a group of 30–40 people on the same flight and pay a negotiated group fare instead of the festival
           price.
         </p>
-        <Link href="/login" className="btn-primary mt-6">
-          Create your free account
-        </Link>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/pools" className="btn-primary">
+            Find a pool
+          </Link>
+          <Link href="/login" className="btn border border-white/40 text-white hover:bg-white/10">
+            Create your free account
+          </Link>
+        </div>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-3">

@@ -1,5 +1,22 @@
--- Demo seed data (example values only). Run after 0001_init.sql.
+-- Demo seed data (example values only). Run after all files in supabase/migrations.
 -- Dates are around Diwali 2027 (29 Oct 2027) and Chhath 2027.
+
+insert into public.airports (code, city, name) values
+  ('DEL', 'Delhi',     'Indira Gandhi International'),
+  ('BOM', 'Mumbai',    'Chhatrapati Shivaji Maharaj International'),
+  ('BLR', 'Bengaluru', 'Kempegowda International'),
+  ('MAA', 'Chennai',   'Chennai International'),
+  ('HYD', 'Hyderabad', 'Rajiv Gandhi International'),
+  ('CCU', 'Kolkata',   'Netaji Subhas Chandra Bose International'),
+  ('PAT', 'Patna',     'Jay Prakash Narayan'),
+  ('LKO', 'Lucknow',   'Chaudhary Charan Singh International'),
+  ('COK', 'Kochi',     'Cochin International'),
+  ('GOI', 'Goa',       'Dabolim'),
+  ('JAI', 'Jaipur',    'Jaipur International'),
+  ('VNS', 'Varanasi',  'Lal Bahadur Shastri International'),
+  ('GAU', 'Guwahati',  'Lokpriya Gopinath Bordoloi International'),
+  ('AMD', 'Ahmedabad', 'Sardar Vallabhbhai Patel International'),
+  ('PNQ', 'Pune',      'Pune');
 
 insert into public.festivals (id, name, start_date, end_date, region) values
   ('11111111-0000-0000-0000-000000000001', 'Diwali 2027',      '2027-10-27', '2027-11-01', 'All India'),

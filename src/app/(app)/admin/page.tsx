@@ -32,7 +32,13 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Admin</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Admin</h1>
+        <div className="flex gap-2">
+          <Link href="/admin/catalogue" className="btn-ghost">Festivals and routes</Link>
+          <Link href="/pools/new" className="btn-brand">Create a pool</Link>
+        </div>
+      </div>
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           ["Users", rows.length],
