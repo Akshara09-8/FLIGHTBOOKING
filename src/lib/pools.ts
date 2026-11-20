@@ -52,6 +52,7 @@ export type Pool = {
   is_private: boolean;
   invite_code: string | null;
   created_by: string | null;
+  deposit_paise: number;
 };
 
 export type PoolWithRefs = Pool & {
@@ -60,7 +61,7 @@ export type PoolWithRefs = Pool & {
 };
 
 export const POOL_SELECT =
-  "id, festival_id, flight_id, origin, destination, travel_date, time_window, min_seats, max_seats, seats_filled, cut_off_at, status, market_fare_paise, target_fare_paise, is_private, invite_code, created_by, festival:festivals(name), flight:flights(airline, flight_no, departs_at, arrives_at)";
+  "id, festival_id, flight_id, origin, destination, travel_date, time_window, min_seats, max_seats, seats_filled, cut_off_at, status, market_fare_paise, target_fare_paise, is_private, invite_code, created_by, deposit_paise, festival:festivals(name), flight:flights(airline, flight_no, departs_at, arrives_at)";
 
 /** Statuses in which people can still join or leave. */
 export const JOINABLE_STATUSES: PoolStatus[] = ["open", "min_reached"];
@@ -158,6 +159,7 @@ export function poolErrorMessage(raw: string | null | undefined): string {
   const code = (raw ?? "").trim();
   const map: Record<string, string> = {
     NOT_SIGNED_IN: "Log in to continue.",
+    SUBSCRIPTION_REQUIRED: "You need an active plan to join pools. See Plans.",
     NO_TRAVELLERS: "Choose at least one traveller.",
     PARTY_TOO_LARGE: "You can add up to 9 travellers at a time.",
     DUPLICATE_TRAVELLER: "Each traveller can be added only once.",

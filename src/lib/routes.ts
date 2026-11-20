@@ -1,5 +1,13 @@
 /** Pages that need a signed-in user. */
-export const PROTECTED_PREFIXES = ["/dashboard", "/profile", "/travellers", "/admin", "/pools/new"] as const;
+export const PROTECTED_PREFIXES = [
+  "/dashboard",
+  "/profile",
+  "/travellers",
+  "/admin",
+  "/pools/new",
+  "/payments",
+  "/pay",
+] as const;
 
 export function isProtectedPath(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

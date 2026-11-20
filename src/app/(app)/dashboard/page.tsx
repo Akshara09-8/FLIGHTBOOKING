@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { canAccessAdmin, ROLE_LABELS } from "@/lib/roles";
 import { formatTravelDate, POOL_STATUS_LABELS, type PoolStatus } from "@/lib/pools";
 import { SeatMeter } from "@/components/SeatMeter";
+import { getActivePlan } from "@/lib/subscription";
 
 export const metadata = { title: "Dashboard · GroupFly" };
 
@@ -46,6 +47,7 @@ export default async function DashboardPage() {
     myPools.set(row.pool.id, entry);
   }
   const pools = [...myPools.values()].sort((a, b) => a.travel_date.localeCompare(b.travel_date));
+  const activePlan = await getActivePlan(supabase, profile.id);
 
   const firstName = profile.full_name?.split(" ")[0];
   const needsProfile = !profile.full_name;
@@ -81,7 +83,26 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href={activePlan ? "/payments" : "/plans"} className={`card hover:border-brand ${activePlan ? "" : "border-accent"}`}>
+          <p className="text-sm text-muted">Plan</p>
+          {activePlan ? (
+            <>
+              <p className="mt-1 font-semibold">{activePlan.planName}</p>
+              <p className="text-sm text-muted">
+                Active until{" "}
+                {new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" }).format(
+                  new Date(activePlan.endsAt),
+                )}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 font-semibold">No active plan</p>
+              <p className="text-sm text-muted">Get a plan to join pools</p>
+            </>
+          )}
+        </Link>
         <Link href="/travellers" className="card hover:border-brand">
           <p className="text-sm text-muted">Saved travellers</p>
           <p className="mt-1 text-3xl font-bold tabular-nums">{travellerCount ?? 0}</p>
@@ -123,7 +144,7 @@ export default async function DashboardPage() {
                 </div>
                 <SeatMeter seatsFilled={p.seats_filled} minSeats={p.min_seats} maxSeats={p.max_seats} size="sm" />
                 <p className="text-sm">
-                  {p.seats > 0 && `${p.seats} seat${p.seats > 1 ? "s" : ""} held`}
+                  {p.seats > 0 && `${p.seats} seat${p.seats > 1 ? "s" : ""}`}
                   {p.seats > 0 && p.waitlisted > 0 && " · "}
                   {p.waitlisted > 0 && <span className="text-danger">{p.waitlisted} on waitlist</span>}
                 </p>

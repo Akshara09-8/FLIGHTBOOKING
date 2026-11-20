@@ -21,6 +21,10 @@ import {
   type PoolWithRefs,
 } from "@/lib/pools";
 import { toRole } from "@/lib/roles";
+import { getActivePlan, type ActivePlan } from "@/lib/subscription";
+import { formatRupees } from "@/lib/payments/money";
+import { CheckoutButton } from "@/components/CheckoutButton";
+import { startDeposit } from "@/app/payments/actions";
 import { LiveSeats } from "./LiveSeats";
 import { JoinForm } from "./JoinForm";
 import { LeaveForm } from "./LeaveForm";
@@ -30,7 +34,19 @@ export const metadata = { title: "Pool · GroupFly" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type Member = { traveller_id: string; status: "held" | "confirmed" | "waitlisted"; traveller: { full_name_as_on_id: string } | null };
+type Member = {
+  traveller_id: string;
+  party_id: string;
+  status: "held" | "confirmed" | "waitlisted";
+  hold_expires_at: string | null;
+  traveller: { full_name_as_on_id: string } | null;
+};
+
+const MEMBER_STATUS: Record<Member["status"], string> = {
+  held: "Deposit due",
+  confirmed: "Seat confirmed",
+  waitlisted: "Waitlist",
+};
 
 export default async function PoolPage({
   params,
@@ -71,6 +87,7 @@ export default async function PoolPage({
   if (!pool) notFound();
 
   let role = toRole(undefined);
+  let activePlan: ActivePlan = null;
   let members: Member[] = [];
   let available: { id: string; name: string }[] = [];
   if (user) {
@@ -78,14 +95,18 @@ export default async function PoolPage({
       supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
       supabase
         .from("pool_members")
-        .select("traveller_id, status, traveller:travellers(full_name_as_on_id)")
+        .select("traveller_id, party_id, status, hold_expires_at, traveller:travellers(full_name_as_on_id)")
         .eq("pool_id", pool.id)
         .eq("user_id", user.id)
         .neq("status", "left"),
       supabase.from("travellers").select("id, full_name_as_on_id").eq("user_id", user.id).order("is_self", { ascending: false }),
     ]);
     role = toRole(profile?.role);
-    members = (memberRows ?? []) as unknown as Member[];
+    activePlan = await getActivePlan(supabase, user.id);
+    members = ((memberRows ?? []) as unknown as Member[]).filter(
+      // Holds that ran out are released by the database every minute; hide them right away.
+      (m) => !(m.status === "held" && m.hold_expires_at && new Date(m.hold_expires_at).getTime() <= Date.now()),
+    );
     const inPool = new Set(members.map((m) => m.traveller_id));
     available = (travellerRows ?? [])
       .filter((t) => !inPool.has(t.id))
@@ -102,6 +123,16 @@ export default async function PoolPage({
   const inviteUrl = pool.is_private && pool.invite_code ? `${proto}://${host}/pools/${pool.id}?code=${pool.invite_code}` : null;
   const nextPath = `/pools/${pool.id}${code ? `?code=${encodeURIComponent(code)}` : ""}`;
   const waitlisted = members.length > 0 && members.every((m) => m.status === "waitlisted");
+  const canJoinNow = role === "admin" || activePlan !== null;
+  // Each party with seats on hold needs one deposit payment.
+  const unpaidParties = [...new Set(members.filter((m) => m.status === "held").map((m) => m.party_id))].map((partyId) => {
+    const ms = members.filter((m) => m.party_id === partyId && m.status === "held");
+    return {
+      partyId,
+      seats: ms.length,
+      dueBy: ms.map((m) => m.hold_expires_at).filter((d): d is string => Boolean(d)).sort()[0] ?? null,
+    };
+  });
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -158,8 +189,8 @@ export default async function PoolPage({
             <p className="text-xs text-muted">{formatDateTimeIST(pool.cut_off_at)}</p>
           </div>
           <div>
-            <p className="text-muted">If the pool doesn&apos;t fill</p>
-            <p>It closes and nothing is charged.</p>
+            <p className="text-muted">Deposit to join</p>
+            <p>{formatRupees(Number(pool.deposit_paise))} per seat, refunded in full if the pool closes</p>
           </div>
         </div>
       </section>
@@ -173,12 +204,25 @@ export default async function PoolPage({
                 {members.map((m) => (
                   <li key={m.traveller_id} className="flex justify-between">
                     <span>{m.traveller?.full_name_as_on_id}</span>
-                    <span className="text-muted">{m.status === "waitlisted" ? "Waitlist" : "Seat held"}</span>
+                    <span className={m.status === "held" ? "font-medium text-danger" : "text-muted"}>
+                      {MEMBER_STATUS[m.status]}
+                    </span>
                   </li>
                 ))}
               </ul>
             </div>
           )}
+
+          {unpaidParties.map((p) => (
+            <div key={p.partyId} className="space-y-2 rounded-lg border border-accent p-3">
+              <p className="text-sm">
+                Pay {formatRupees(p.seats * Number(pool.deposit_paise))} deposit for {p.seats} seat
+                {p.seats > 1 ? "s" : ""}
+                {p.dueBy ? ` by ${formatDateTimeIST(p.dueBy)}` : ""}, or the seats are released.
+              </p>
+              <CheckoutButton start={startDeposit.bind(null, pool.id, p.partyId)} label="Pay deposit" />
+            </div>
+          ))}
 
           {!user ? (
             <div className="space-y-2">
@@ -189,10 +233,22 @@ export default async function PoolPage({
             </div>
           ) : !joinable ? (
             <p className="text-sm text-muted">This pool is no longer taking new members.</p>
+          ) : !canJoinNow ? (
+            <div className="space-y-2">
+              <p className="font-semibold">Get a plan to join</p>
+              <p className="text-sm text-muted">Plans start at ₹199 for 30 days. Browsing pools stays free.</p>
+              <Link href="/plans" className="btn-primary w-full">See plans</Link>
+            </div>
           ) : (
             <div className="space-y-2">
               {members.length > 0 && <p className="font-semibold">Add more travellers</p>}
-              <JoinForm poolId={pool.id} code={code} travellers={available} seatsLeft={p.seatsLeft} />
+              <JoinForm
+                poolId={pool.id}
+                code={code}
+                travellers={available}
+                seatsLeft={p.seatsLeft}
+                depositLabel={formatRupees(Number(pool.deposit_paise))}
+              />
             </div>
           )}
 

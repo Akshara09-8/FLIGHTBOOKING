@@ -35,6 +35,7 @@ export default async function AdminPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Admin</h1>
         <div className="flex gap-2">
+          <Link href="/admin/pools" className="btn-ghost">Pools and deposits</Link>
           <Link href="/admin/catalogue" className="btn-ghost">Festivals and routes</Link>
           <Link href="/pools/new" className="btn-brand">Create a pool</Link>
         </div>

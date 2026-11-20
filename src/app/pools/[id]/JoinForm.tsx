@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { joinPool } from "../actions";
 import { EMPTY_FORM_STATE, type FormState } from "@/lib/form-state";
+import { CheckoutButton } from "@/components/CheckoutButton";
+import { startDeposit } from "@/app/payments/actions";
 
 type Option = { id: string; name: string };
 
@@ -12,19 +14,27 @@ export function JoinForm({
   code,
   travellers,
   seatsLeft,
+  depositLabel,
 }: {
   poolId: string;
   code?: string;
   travellers: Option[];
   seatsLeft: number;
+  depositLabel: string;
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(joinPool, EMPTY_FORM_STATE);
 
   if (state.ok) {
+    const partyId = state.data?.partyId;
     return (
-      <p className="rounded-lg bg-brand-soft px-4 py-3 text-sm text-brand" role="status">
-        {state.message}
-      </p>
+      <div className="space-y-3">
+        <p className="rounded-lg bg-brand-soft px-4 py-3 text-sm text-brand" role="status">
+          {state.message}
+        </p>
+        {state.data?.status === "held" && partyId && (
+          <CheckoutButton start={() => startDeposit(poolId, partyId)} label="Pay deposit now" />
+        )}
+      </div>
     );
   }
 
@@ -61,7 +71,8 @@ export function JoinForm({
       </button>
       {state.message && <p className="field-error" role="alert">{state.message}</p>}
       <p className="text-xs text-muted">
-        No payment yet. Deposits arrive in the next release; joining holds your place.
+        Seats are held for 15 minutes while you pay a refundable deposit of {depositLabel} per seat. Leave before the
+        joining deadline and it&apos;s refunded in full.
       </p>
     </form>
   );

@@ -25,14 +25,25 @@ describe("roles (T1.3)", () => {
 });
 
 describe("protected routes (T1.3, T1.7)", () => {
-  it.each(["/dashboard", "/profile", "/travellers", "/travellers/abc", "/admin", "/admin/catalogue", "/pools/new"])(
+  it.each([
+    "/dashboard",
+    "/profile",
+    "/travellers",
+    "/travellers/abc",
+    "/admin",
+    "/admin/catalogue",
+    "/pools/new",
+    "/payments",
+    "/payments/abc",
+    "/pay/mock/abc",
+  ])(
     "%s needs sign-in",
     (p) => {
       expect(isProtectedPath(p)).toBe(true);
     },
   );
 
-  it.each(["/", "/login", "/auth/callback", "/administrator", "/profiles-public", "/pools", "/pools/123"])("%s is public", (p) => {
+  it.each(["/", "/login", "/auth/callback", "/administrator", "/profiles-public", "/pools", "/pools/123", "/plans", "/payment-info"])("%s is public", (p) => {
     expect(isProtectedPath(p)).toBe(false);
   });
 });

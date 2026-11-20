@@ -7,5 +7,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Everything except static files and images.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+  // Webhooks carry no user session, so they skip the session refresh.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/webhooks|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
 };

@@ -34,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <Link href="/pools" className="hover:underline">Pools</Link>
                 <Link href="/dashboard" className="hover:underline">Dashboard</Link>
                 <Link href="/travellers" className="hover:underline">Travellers</Link>
+                <Link href="/payments" className="hover:underline">Payments</Link>
                 <Link href="/profile" className="hover:underline">Profile</Link>
                 <form action={signOut}>
                   <button type="submit" className="rounded-md border border-white/40 px-3 py-1 hover:bg-white/10">
@@ -44,6 +45,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             ) : (
               <div className="flex items-center gap-4 text-sm">
                 <Link href="/pools" className="hover:underline">Browse pools</Link>
+                <Link href="/plans" className="hover:underline">Plans</Link>
                 <Link href="/login" className="rounded-md bg-accent px-3 py-1.5 font-semibold text-accent-ink">
                   Log in
                 </Link>

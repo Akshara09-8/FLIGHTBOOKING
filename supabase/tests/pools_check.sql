@@ -28,6 +28,11 @@ declare
 begin
   if a is null or b is null then raise exception 'Need two signed-up non-admin users'; end if;
 
+  -- Since Phase 3, joining needs an active plan.
+  insert into public.subscriptions (user_id, plan, status, starts_at, ends_at)
+  values (a, 'monthly', 'active', now(), now() + interval '30 days'),
+         (b, 'monthly', 'active', now(), now() + interval '30 days');
+
   -- A test pool with room for 4 (limits relaxed directly, bypassing create_pool's minimums).
   insert into public.pools (origin, destination, travel_date, time_window, min_seats, max_seats,
                             cut_off_at, status, market_fare_paise, target_fare_paise)

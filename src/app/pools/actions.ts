@@ -11,6 +11,7 @@ import {
 } from "@/lib/pools";
 import { fieldErrors } from "@/lib/validation";
 import type { FormState } from "@/lib/form-state";
+import { refundPayment } from "@/lib/payments/service";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -30,16 +31,21 @@ export async function joinPool(_prev: FormState, formData: FormData): Promise<Fo
   });
   if (error) return { message: poolErrorMessage(error.message) };
 
-  const row = (data as { r_member_status: string; r_seats_filled: number }[] | null)?.[0];
+  const row = (data as { r_member_status: string; r_seats_filled: number; r_party_id: string }[] | null)?.[0];
   revalidatePath(`/pools/${poolId}`);
   revalidatePath("/dashboard");
   const n = travellerIds.length;
   return row?.r_member_status === "waitlisted"
     ? {
         ok: true,
-        message: `The pool is full, so your group of ${n} is on the waitlist. You'll move up together if ${n} seat${n > 1 ? "s" : ""} free up.`,
+        message: `The pool is full, so your group of ${n} is on the waitlist. You'll move up together if ${n} seat${n > 1 ? "s" : ""} free up, then pay the deposit.`,
+        data: { status: "waitlisted" },
       }
-    : { ok: true, message: `You're in. ${n} seat${n > 1 ? "s" : ""} held for your group.` };
+    : {
+        ok: true,
+        message: `${n} seat${n > 1 ? "s" : ""} held for 15 minutes. Pay the refundable deposit to confirm.`,
+        data: { status: "held", partyId: row?.r_party_id ?? "" },
+      };
 }
 
 export async function leavePool(_prev: FormState, formData: FormData): Promise<FormState> {
@@ -47,12 +53,20 @@ export async function leavePool(_prev: FormState, formData: FormData): Promise<F
   if (!UUID.test(poolId)) return { message: poolErrorMessage("POOL_NOT_FOUND") };
 
   const { supabase } = await requireUser();
-  const { error } = await supabase.rpc("leave_pool", { p_pool_id: poolId });
+  const { data, error } = await supabase.rpc("leave_pool", { p_pool_id: poolId });
   if (error) return { message: poolErrorMessage(error.message) };
+
+  // Leaving before the cut-off refunds paid deposits in full.
+  const refundIds = (data as { r_refund_payment_ids: string[] | null }[] | null)?.[0]?.r_refund_payment_ids ?? [];
+  const results = await Promise.all(refundIds.map((id) => refundPayment(id)));
 
   revalidatePath(`/pools/${poolId}`);
   revalidatePath("/dashboard");
-  return { ok: true, message: "You've left the pool and your seats were released." };
+  revalidatePath("/payments");
+  if (refundIds.length === 0) return { ok: true, message: "You've left the pool and your seats were released." };
+  return results.every((r) => r === "refunded")
+    ? { ok: true, message: "You've left the pool. Your deposit has been refunded; see Payments." }
+    : { ok: true, message: "You've left the pool. Your deposit refund has been requested and will be retried if needed." };
 }
 
 export async function createAlert(formData: FormData) {
