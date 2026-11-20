@@ -24,7 +24,8 @@ import { toRole } from "@/lib/roles";
 import { getActivePlan, type ActivePlan } from "@/lib/subscription";
 import { formatRupees } from "@/lib/payments/money";
 import { CheckoutButton } from "@/components/CheckoutButton";
-import { startDeposit } from "@/app/payments/actions";
+import { startBalance, startDeposit } from "@/app/payments/actions";
+import { balanceDue, poolTimeline } from "@/lib/ops";
 import { LiveSeats } from "./LiveSeats";
 import { JoinForm } from "./JoinForm";
 import { LeaveForm } from "./LeaveForm";
@@ -39,8 +40,10 @@ type Member = {
   party_id: string;
   status: "held" | "confirmed" | "waitlisted";
   hold_expires_at: string | null;
+  balance_paid_at: string | null;
   traveller: { full_name_as_on_id: string } | null;
 };
+type MyTicket = { id: string; traveller_id: string; pnr: string | null; ticket_number: string | null; file_path: string | null };
 
 const MEMBER_STATUS: Record<Member["status"], string> = {
   held: "Deposit due",
@@ -89,13 +92,14 @@ export default async function PoolPage({
   let role = toRole(undefined);
   let activePlan: ActivePlan = null;
   let members: Member[] = [];
+  let myTickets: MyTicket[] = [];
   let available: { id: string; name: string }[] = [];
   if (user) {
     const [{ data: profile }, { data: memberRows }, { data: travellerRows }] = await Promise.all([
       supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
       supabase
         .from("pool_members")
-        .select("traveller_id, party_id, status, hold_expires_at, traveller:travellers(full_name_as_on_id)")
+        .select("traveller_id, party_id, status, hold_expires_at, balance_paid_at, traveller:travellers(full_name_as_on_id)")
         .eq("pool_id", pool.id)
         .eq("user_id", user.id)
         .neq("status", "left"),
@@ -107,6 +111,14 @@ export default async function PoolPage({
       // Holds that ran out are released by the database every minute; hide them right away.
       (m) => !(m.status === "held" && m.hold_expires_at && new Date(m.hold_expires_at).getTime() <= Date.now()),
     );
+    if (members.length > 0) {
+      const { data: ticketRows } = await supabase
+        .from("tickets")
+        .select("id, traveller_id, pnr, ticket_number, file_path")
+        .eq("pool_id", pool.id)
+        .eq("user_id", user.id);
+      myTickets = (ticketRows ?? []) as MyTicket[];
+    }
     const inPool = new Set(members.map((m) => m.traveller_id));
     available = (travellerRows ?? [])
       .filter((t) => !inPool.has(t.id))
@@ -133,6 +145,21 @@ export default async function PoolPage({
       dueBy: ms.map((m) => m.hold_expires_at).filter((d): d is string => Boolean(d)).sort()[0] ?? null,
     };
   });
+  // Once the airline fare is fixed, each confirmed party pays its balance.
+  const balanceParties =
+    pool.status === "payment_due" && pool.final_fare_paise != null
+      ? [...new Set(members.filter((m) => m.status === "confirmed").map((m) => m.party_id))].map((partyId) => {
+          const ms = members.filter((m) => m.party_id === partyId && m.status === "confirmed");
+          return {
+            partyId,
+            seats: ms.length,
+            paid: ms.every((m) => m.balance_paid_at),
+            amount: balanceDue(ms.length, Number(pool.final_fare_paise), Number(pool.deposit_paise)),
+          };
+        })
+      : [];
+  const nameOf = new Map(members.map((m) => [m.traveller_id, m.traveller?.full_name_as_on_id ?? ""]));
+  const isMember = members.some((m) => m.status === "confirmed");
 
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
@@ -160,16 +187,66 @@ export default async function PoolPage({
             <span className="text-muted line-through">{formatInr(pool.market_fare_paise)}</span>
           </div>
           <div className="flex items-end justify-between">
-            <span>Estimated group fare</span>
-            <span className="text-2xl font-bold text-brand">{formatInr(pool.target_fare_paise)}</span>
+            <span>{pool.final_fare_paise != null ? "Confirmed group fare" : "Estimated group fare"}</span>
+            <span className="text-2xl font-bold text-brand">
+              {formatInr(pool.final_fare_paise ?? pool.target_fare_paise)}
+            </span>
           </div>
           {save && (
             <p className="text-sm font-semibold text-ok">
               You save about {formatInr(save.amountPaise)} per seat ({save.percent}%)
             </p>
           )}
-          <p className="pt-1 text-xs text-muted">The final fare is confirmed when the airline quotes for the group.</p>
+          {pool.final_fare_paise == null && (
+            <p className="pt-1 text-xs text-muted">The final fare is confirmed when the airline quotes for the group.</p>
+          )}
         </div>
+
+        {isMember && (
+          <div className="card">
+            <p className="mb-3 font-semibold">Your trip</p>
+            <ol className="space-y-2">
+              {poolTimeline(pool.status).map((step) => (
+                <li key={step.key} className="flex items-center gap-3 text-sm">
+                  <span
+                    className={`h-3 w-3 shrink-0 rounded-full border-2 ${
+                      step.state === "current"
+                        ? "border-accent bg-accent"
+                        : step.state === "done"
+                          ? "border-brand bg-brand"
+                          : "border-line bg-white"
+                    }`}
+                    aria-hidden
+                  />
+                  <span className={step.state === "todo" ? "text-muted" : step.state === "current" ? "font-semibold" : ""}>
+                    {step.label}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        {myTickets.length > 0 && (
+          <div className="card space-y-2">
+            <p className="font-semibold">Your e-tickets</p>
+            <ul className="divide-y divide-line text-sm">
+              {myTickets.map((t) => (
+                <li key={t.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span>
+                    {nameOf.get(t.traveller_id)} · PNR <b>{t.pnr}</b>
+                    {t.ticket_number ? ` · Ticket ${t.ticket_number}` : ""}
+                  </span>
+                  {t.file_path && (
+                    <a href={`/api/tickets/${t.id}`} className="btn-ghost py-1" target="_blank" rel="noreferrer">
+                      Download
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="card">
           <LiveSeats poolId={pool.id} initialSeats={pool.seats_filled} minSeats={pool.min_seats} maxSeats={pool.max_seats} />
@@ -223,6 +300,24 @@ export default async function PoolPage({
               <CheckoutButton start={startDeposit.bind(null, pool.id, p.partyId)} label="Pay deposit" />
             </div>
           ))}
+
+          {balanceParties.map((b) =>
+            b.paid ? (
+              <p key={b.partyId} className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand">
+                Fare fully paid for {b.seats} seat{b.seats > 1 ? "s" : ""}. Tickets follow once names are sent to the airline.
+              </p>
+            ) : (
+              <div key={b.partyId} className="space-y-2 rounded-lg border border-accent p-3">
+                <p className="text-sm">
+                  The airline confirmed {formatRupees(Number(pool.final_fare_paise))} per seat. Pay the balance of{" "}
+                  <b>{formatRupees(b.amount)}</b> for {b.seats} seat{b.seats > 1 ? "s" : ""}
+                  {pool.balance_due_at ? ` by ${formatDateTimeIST(pool.balance_due_at)}` : ""}. Unpaid seats are released and
+                  the deposit is kept.
+                </p>
+                <CheckoutButton start={startBalance.bind(null, pool.id, b.partyId)} label="Pay balance" />
+              </div>
+            ),
+          )}
 
           {!user ? (
             <div className="space-y-2">

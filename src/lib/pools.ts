@@ -53,6 +53,8 @@ export type Pool = {
   invite_code: string | null;
   created_by: string | null;
   deposit_paise: number;
+  final_fare_paise: number | null;
+  balance_due_at: string | null;
 };
 
 export type PoolWithRefs = Pool & {
@@ -61,7 +63,7 @@ export type PoolWithRefs = Pool & {
 };
 
 export const POOL_SELECT =
-  "id, festival_id, flight_id, origin, destination, travel_date, time_window, min_seats, max_seats, seats_filled, cut_off_at, status, market_fare_paise, target_fare_paise, is_private, invite_code, created_by, deposit_paise, festival:festivals(name), flight:flights(airline, flight_no, departs_at, arrives_at)";
+  "id, festival_id, flight_id, origin, destination, travel_date, time_window, min_seats, max_seats, seats_filled, cut_off_at, status, market_fare_paise, target_fare_paise, is_private, invite_code, created_by, deposit_paise, final_fare_paise, balance_due_at, festival:festivals(name), flight:flights(airline, flight_no, departs_at, arrives_at)";
 
 /** Statuses in which people can still join or leave. */
 export const JOINABLE_STATUSES: PoolStatus[] = ["open", "min_reached"];

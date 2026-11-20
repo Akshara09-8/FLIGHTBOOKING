@@ -63,6 +63,11 @@ export function receiptContent(d: ReceiptData): ReceiptContent {
     ];
   } else if (d.type === "refund") {
     totals = [["Total refunded", formatRupeesPlain(d.amountPaise)]];
+  } else if (d.type === "balance") {
+    totals = [
+      ["Taxes", "Included in the airline fare"],
+      ["Total paid", formatRupeesPlain(d.amountPaise)],
+    ];
   } else {
     totals = [
       ["GST", "Not applicable (refundable deposit)"],

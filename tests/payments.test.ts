@@ -160,6 +160,15 @@ describe("receipts (T3.8)", () => {
     expect(c.totals[0][1]).toMatch(/Not applicable/);
   });
 
+  it("describes a fare balance without calling it a deposit", () => {
+    const c = receiptContent({ ...base, type: "balance", amountPaise: 2385000, pool: { origin: "DEL", destination: "PAT", travel_date: "2027-10-29" } });
+    expect(c.item).toBe("Fare balance, DEL to PAT, 2027-10-29");
+    expect(c.totals).toEqual([
+      ["Taxes", "Included in the airline fare"],
+      ["Total paid", "Rs. 23,850.00"],
+    ]);
+  });
+
   it("titles refunds and notes refunded payments", () => {
     expect(receiptContent({ ...base, type: "refund" }).title).toBe("Refund note");
     expect(receiptContent({ ...base, status: "refunded" }).notes[0]).toMatch(/refunded in full/);

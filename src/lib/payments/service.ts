@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { gatewayConfig, getGateway, mockGateway, razorpayGateway, type GatewayName } from "./gateway";
 import { depositTotal } from "./money";
+import { balanceDue } from "@/lib/ops";
 import { verifyCheckoutSignature, verifyWebhookSignature } from "./signatures";
 import { parseRazorpayWebhook } from "./webhook";
 
@@ -20,7 +21,7 @@ type Payer = { id: string; email: string | null; name: string | null; phone: str
 
 async function createPaymentAndOrder(args: {
   payer: Payer;
-  type: "subscription" | "deposit";
+  type: "subscription" | "deposit" | "balance";
   amountPaise: number;
   description: string;
   plan?: string;
@@ -128,6 +129,46 @@ export async function startDepositCheckout(payer: Payer, poolId: string, partyId
     partyId,
     amountPaise: depositTotal(held.length, Number(pool.deposit_paise)),
     description: `Refundable deposit · ${held.length} seat${held.length > 1 ? "s" : ""} · ${pool.origin} → ${pool.destination}`,
+  });
+}
+
+/** Fare balance once the airline quote is accepted: seats × (final fare − deposit). */
+export async function startBalanceCheckout(payer: Payer, poolId: string, partyId: string): Promise<CheckoutResult> {
+  const admin = createAdminClient();
+  const [{ data: members }, { data: pool }] = await Promise.all([
+    admin
+      .from("pool_members")
+      .select("status, balance_paid_at")
+      .eq("pool_id", poolId)
+      .eq("party_id", partyId)
+      .eq("user_id", payer.id)
+      .eq("status", "confirmed"),
+    admin
+      .from("pools")
+      .select("origin, destination, deposit_paise, final_fare_paise, status, balance_due_at")
+      .eq("id", poolId)
+      .maybeSingle(),
+  ]);
+  if (!pool || !members || members.length === 0) return { ok: false, error: "We couldn't find those seats." };
+  if (pool.status !== "payment_due" || pool.final_fare_paise == null) return { ok: false, error: "No balance is due for this pool." };
+  if (pool.balance_due_at && new Date(pool.balance_due_at).getTime() <= Date.now()) {
+    return { ok: false, error: "The balance deadline has passed. Contact support." };
+  }
+  if (members.every((m) => m.balance_paid_at)) return { ok: false, error: "The balance for these seats is already paid." };
+
+  const amount = balanceDue(members.length, Number(pool.final_fare_paise), Number(pool.deposit_paise));
+  if (amount === 0) {
+    // The deposit already covers the fare.
+    await admin.from("pool_members").update({ balance_paid_at: new Date().toISOString() }).eq("party_id", partyId).eq("status", "confirmed");
+    return { ok: false, error: "Nothing more to pay: your deposit covers the fare. Your seats are fully paid." };
+  }
+  return createPaymentAndOrder({
+    payer,
+    type: "balance",
+    poolId,
+    partyId,
+    amountPaise: amount,
+    description: `Fare balance · ${members.length} seat${members.length > 1 ? "s" : ""} · ${pool.origin} → ${pool.destination}`,
   });
 }
 

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import {
   completeMockPayment,
   confirmRazorpayCheckout,
+  startBalanceCheckout,
   startDepositCheckout,
   startSubscriptionCheckout,
   type CheckoutResult,
@@ -24,6 +25,11 @@ export async function startSubscription(planCode: string): Promise<CheckoutResul
 export async function startDeposit(poolId: string, partyId: string): Promise<CheckoutResult> {
   if (!UUID.test(poolId) || !UUID.test(partyId)) return { ok: false, error: "We couldn't find those seats." };
   return startDepositCheckout(await payer(), poolId, partyId);
+}
+
+export async function startBalance(poolId: string, partyId: string): Promise<CheckoutResult> {
+  if (!UUID.test(poolId) || !UUID.test(partyId)) return { ok: false, error: "We couldn't find those seats." };
+  return startBalanceCheckout(await payer(), poolId, partyId);
 }
 
 export async function confirmCheckout(input: {
